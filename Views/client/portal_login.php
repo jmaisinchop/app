@@ -1,0 +1,134 @@
+<?php
+$this->extend('client/template_portal');
+$this->section('window_title');
+echo 'Iniciar Sesión - Portal Austrobank';
+$this->endSection();
+?>
+
+<?php $this->section('content'); ?>
+<div class="container" style="max-width: 500px; margin-top: 4rem; margin-bottom: 4rem;">
+    <div class="auth-card">
+        <div class="text-center mb-4">
+            <h2 class="mt-3">Iniciar Sesión</h2>
+        </div>
+
+        <?php if (session()->getFlashdata('error')): ?>
+            <div class="alert alert-danger"><?= session()->getFlashdata('error') ?></div>
+        <?php endif; ?>
+        <?php if (session()->getFlashdata('success')): ?>
+            <div class="alert alert-success"><?= session()->getFlashdata('success') ?></div>
+        <?php endif; ?>
+        <?php if (session('validation')): ?>
+            <div class="alert alert-danger"><?= session('validation')->listErrors() ?></div>
+        <?php endif; ?>
+
+        <?= form_open(site_url('portal/login')) ?>
+            <?= csrf_field() ?>
+            <div class="form-group">
+                <label for="email">Correo Electrónico</label>
+                <input type="email" name="email" id="email" class="form-control" value="<?= old('email') ?>" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Contraseña</label>
+                <input type="password" name="password" id="password" class="form-control" required>
+            </div>
+
+            <div class="form-group">
+                <label>Código de Seguridad</label>
+                <div class="d-flex align-items-center flex-wrap">
+                    <div class="mr-2" id="captcha-image-container">
+                        <img src="<?= $captcha_image_inline ?? '' ?>" alt="captcha" id="captcha-image">
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="captcha-refresh-btn" title="Generar otro código">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                    <input type="text" name="captcha" id="captcha-input" class="form-control mx-3" style="width: 150px; flex-grow: 1;" required autocomplete="off" placeholder="Escribe aquí">
+                    <button type="button" class="btn btn-info btn-sm" id="captcha-validate-btn">Validar</button>
+                </div>
+                <div id="captcha-feedback-text" class="small mt-2"></div>
+            </div>
+            <button type="submit" id="submit-btn" class="btn btn-austro btn-block" disabled>Acceder</button>
+
+            <div class="text-center mt-4">
+                <p class="text-muted mb-2">¿Es tu primera vez aquí o no tienes cuenta?</p>
+                <a href="<?= site_url('portal/register') ?>" class="btn btn-outline-secondary btn-block">
+                    <i class="fas fa-user-plus mr-2"></i>Crear Cuenta Personal
+                </a>
+                <hr class="my-3">
+                <a href="<?= site_url(route_to('portal_forgot_password')) ?>"><small>¿Olvidaste tu contraseña?</small></a>
+            </div>
+        <?= form_close() ?>
+    </div>
+</div>
+<?php $this->endSection(); ?>
+
+<?php $this->section('script_block'); ?>
+<script>
+$(document).ready(function() {
+    // --- LÓGICA DEL CAPTCHA DINÁMICO ---
+    const csrfName = '<?= csrf_token() ?>';
+    let csrfHash = '<?= csrf_hash() ?>'; 
+    
+    const captchaValidateUrl = '<?= site_url(route_to("portal_captcha_validate")) ?>';
+    const captchaRefreshUrl = '<?= site_url(route_to("portal_captcha_refresh")) ?>';
+    
+    const captchaInput = $('#captcha-input');
+    const submitBtn = $('#submit-btn');
+    const feedbackText = $('#captcha-feedback-text');
+    const refreshBtn = $('#captcha-refresh-btn');
+    const validateBtn = $('#captcha-validate-btn');
+    const captchaImage = $('#captcha-image');
+
+    // 1. Lógica para refrescar la imagen
+    refreshBtn.on('click', function() {
+        $.get(captchaRefreshUrl, function(data) {
+            if (data.success && data.image) {
+                captchaImage.attr('src', data.image);
+                captchaInput.val('');
+                submitBtn.prop('disabled', true);
+                feedbackText.text('').removeClass('text-success text-danger');
+                
+                csrfHash = data.csrf_hash;
+                $('input[name=' + csrfName + ']').val(csrfHash);
+            }
+        });
+    });
+
+    // 2. Lógica para el botón de "Validar"
+    validateBtn.on('click', function() {
+        const userInput = captchaInput.val();
+        if (!userInput) {
+            feedbackText.text('Por favor, ingresa el código.').addClass('text-danger');
+            return;
+        }
+
+        feedbackText.text('Validando...').removeClass('text-success text-danger');
+        
+        let postData = { 'captcha': userInput };
+        postData[csrfName] = csrfHash;
+
+        $.post(captchaValidateUrl, postData, function(response) {
+            csrfHash = response.csrf_hash;
+            $('input[name=' + csrfName + ']').val(csrfHash);
+            
+            if (response.success) {
+                feedbackText.text('¡Correcto! Ya puedes iniciar sesión.').removeClass('text-danger').addClass('text-success');
+                submitBtn.prop('disabled', false);
+            } else {
+                feedbackText.text('El código es incorrecto. Inténtalo de nuevo.').removeClass('text-success').addClass('text-danger');
+                submitBtn.prop('disabled', true);
+                refreshBtn.click();
+            }
+        }).fail(function() {
+            feedbackText.text('Error de conexión. Por favor, intenta de nuevo.').addClass('text-danger');
+        });
+    });
+    
+
+    captchaInput.on('input', function() {
+        submitBtn.prop('disabled', true);
+        feedbackText.text('').removeClass('text-success text-danger');
+    });
+});
+</script>
+<?php $this->endSection(); ?>
