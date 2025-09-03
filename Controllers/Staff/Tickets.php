@@ -390,33 +390,6 @@ class Tickets extends BaseController
                     'required' => lang('Admin.error.enterMessage'),
                 ]
             ]);
-
-            $departmentModel = new \App\Models\Departments();
-            $selected_dept_id = $this->request->getPost('department');
-            $department = $departmentModel->find($selected_dept_id);
-            if ($department) {
-                $parent_deps_str = trim(getParamText('DEPS_PADRE_CON_HIJOS'));
-                $parent_deps_list = !empty($parent_deps_str) ? explode(',', $parent_deps_str) : [];
-
-                if (in_array($department->name, $parent_deps_list)) {
-                    $validation->setRule('departamento_adjunto', 'Departamento Adjunto', 'required|is_natural_no_zero', [
-                        'required' => 'Debes seleccionar un departamento adjunto (ej: Desarrollo o Soporte).'
-                    ]);
-
-                    $required_child_deps_str = trim(getParamText('DEPS_HIJOS_ADJUNTO_OBLIGATORIO'));
-                    $required_child_deps_list = !empty($required_child_deps_str) ? explode(',', $required_child_deps_str) : [];
-
-                    $selected_child_id = $this->request->getPost('departamento_adjunto');
-                    if ($selected_child_id) {
-                        $selected_child_obj = $departmentModel->find($selected_child_id);
-                        if ($selected_child_obj && in_array($selected_child_obj->name, $required_child_deps_list)) {
-                            $validation->setRule('attachment.0', 'Archivo Adjunto', 'uploaded[attachment.0]', [
-                                'uploaded' => 'Para el departamento ' . esc($selected_child_obj->name) . ', es obligatorio adjuntar al menos un archivo.'
-                            ]);
-                        }
-                    }
-                }
-            }           
             if($this->settings->config('ticket_attachment')){
                 $max_size = $this->settings->config('ticket_file_size')*1024;
                 $allowed_extensions = unserialize($this->settings->config('ticket_file_type'));
@@ -440,8 +413,7 @@ class Tickets extends BaseController
                 }
                 $name = ($this->request->getPost('fullname') == '') ? $this->request->getPost('email') : $this->request->getPost('fullname');
                 $client_id = $this->client->getClientID($name, $this->request->getPost('email'));
-                $final_department_id = $this->request->getPost('departamento_adjunto') ?: $this->request->getPost('department');
-                $ticket_id = $tickets->createTicket($client_id, $this->request->getPost('subject'), $final_department_id, $this->request->getPost('priority'));
+                $ticket_id = $tickets->createTicket($client_id, $this->request->getPost('subject'), $this->request->getPost('department'), $this->request->getPost('priority'));
                 $message = $this->request->getPost('message').$this->staff->getData('signature');
                 $message_id = $tickets->addMessage($ticket_id, $message, $this->staff->getData('id'));
                 $tickets->updateTicket([
@@ -461,31 +433,15 @@ class Tickets extends BaseController
         }
 
 
-        $departmentModel = new \App\Models\Departments();
-        $all_departments = $departmentModel->orderBy('name', 'ASC')->findAll();
-
-        $child_map = [];
-        foreach($all_departments as $dep){
-            if($dep->id_padre != 0){
-                if(!isset($child_map[$dep->id_padre])){
-                    $child_map[$dep->id_padre] = [];
-                }
-                $child_map[$dep->id_padre][] = $dep;
-            }
-        }
-
-        $data_to_view = [
-            'error_msg'         => isset($error_msg) ? $error_msg : null,
-            'success_msg'       => isset($success_msg) ? $success_msg : null,
-            'canned_response'   => $tickets->getCannedList(),
-            'departments_list'  => $all_departments, 
-            'ticket_statuses'   => $tickets->statusList(),
+        return view('staff/ticket_new',[
+            'error_msg' => isset($error_msg) ? $error_msg : null,
+            'success_msg' => isset($success_msg) ? $success_msg : null,
+            'canned_response' => $tickets->getCannedList(),
+            'departments_list' => Services::departments()->getAll(),
+            'ticket_statuses' => $tickets->statusList(),
             'ticket_priorities' => $tickets->getPriorities(),
-            'kb_selector'       => Services::kb()->kb_article_selector(),
-            'child_map'         => $child_map, 
-        ];
-
-        return view('staff/ticket_new', $data_to_view);
+            'kb_selector' => Services::kb()->kb_article_selector(),
+        ]);
     }
 
     public function cannedResponses()
