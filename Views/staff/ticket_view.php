@@ -581,11 +581,48 @@ if (isset($message_result)) {
                                 ?>
                                 <div class="mb-3">
                                     <div><?php echo $ticket->fullname; ?></div>
-                                    <div style="font-size: 11px; color: #007b9d;">
-                                        <?php echo getNamesDepAdjuntosById($dataUser->department); ?>
-                                    </div>
+
+
+
                                     <?php
-                                    echo '<span class="badge badge-dark">' . lang('Admin.form.user') . '</span>';
+                                    $special_department_name = trim(getParamText('DEPARTAMENTO_CLIENTE_ESPECIAL'));
+                                    // Primero, verificamos si el ticket pertenece al departamento especial (ID 20)
+                                    if (!empty($special_department_name) && $ticket->department_name == $special_department_name) {
+                                        
+                                        // Para el departamento 20, buscamos al creador en la tabla de usuarios/clientes.
+                                        // Es posible que necesites una función como findUserByEmail(), similar a la que ya tienes para staff.
+                                        $dataClient = findUserByEmail($ticket->email); 
+
+                                        if ($dataClient) {
+                                            // Mostramos que es un usuario/cliente registrado.
+                                            // Como los clientes no tienen un "departamento" de la misma forma que un agente,
+                                            // podemos poner un texto fijo o el nombre de su compañía si lo tienes.
+                                            echo '<div style="font-size: 11px; color: #007b9d;">Usuario de Austrobank</div>';
+                                            echo '<span class="badge badge-success">Usuario</span>';
+                                        } else {
+                                            // Un respaldo por si no se encuentra el usuario
+                                            echo '<span class="badge badge-secondary">Cliente</span>';
+                                        }
+
+                                    } else {
+                                        
+                                        // Para todos los demás departamentos, usamos la lógica original.
+                                        // Buscamos primero en la tabla de agentes (staff).
+                                        $dataUser = findStaffByEmail($ticket->email);
+
+                                        if ($dataUser) {
+                                            // Si se encuentra, es un agente y mostramos su departamento.
+                                            ?>
+                                            <div style="font-size: 11px; color: #007b9d;">
+                                                <?php echo getNamesDepAdjuntosById($dataUser->department); ?>
+                                            </div>
+                                            <?php echo '<span class="badge badge-dark">' . lang('Admin.form.user') . '</span>'; ?>
+                                            <?php
+                                        } else {
+                                            // Si no se encuentra en staff, es un cliente normal.
+                                            echo '<span class="badge badge-info">Cliente</span>';
+                                        }
+                                    }
                                     ?>
                                 </div>
                             </div>

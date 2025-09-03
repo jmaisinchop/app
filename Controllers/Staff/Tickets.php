@@ -181,14 +181,19 @@ class Tickets extends BaseController
             //Parametro para enviar o no el email al cliente y cerrar el ticket - Proceso Atencion al Cliente.
             $checkedAttachmentFiles = $this->request->getPost('isAttached') ? true : false;
 
-            if($configAttachmentDep->ticket_attachment){
-                $max_size = $configAttachmentDep->ticket_file_size*1024;
-                $allowed_extensions = unserialize($configAttachmentDep->ticket_file_type);
-                $allowed_extensions = implode(',', $allowed_extensions);
-                $validation->setRule('attachment', 'attachment', 'ext_in[attachment,'.$allowed_extensions.']|max_size[attachment,'.$max_size.']',[
-                    'ext_in' => lang('Admin.error.fileNotAllowed'),
-                    'max_size' => lang_replace('Admin.error.fileBig', ['%size%' => number_to_size($max_size*1024, 2)])
-                ]);
+            // SOLUCIÓN DEFINITIVA: Verificamos si la configuración fue encontrada ANTES de usarla.
+            if (!empty($configAttachmentDep)) {
+                
+                // Si la configuración existe, ahora sí comprobamos si los adjuntos están habilitados.
+                if($configAttachmentDep->ticket_attachment){
+                    $max_size = $configAttachmentDep->ticket_file_size * 1024;
+                    $allowed_extensions = unserialize($configAttachmentDep->ticket_file_type);
+                    $allowed_extensions = implode(',', $allowed_extensions);
+                    $validation->setRule('attachment', 'attachment', 'ext_in[attachment,' . $allowed_extensions . ']|max_size[attachment,' . $max_size . ']', [
+                        'ext_in' => lang('Admin.error.fileNotAllowed'),
+                        'max_size' => lang_replace('Admin.error.fileBig', ['%size%' => number_to_size($max_size * 1024, 2)])
+                    ]);
+                }
             }
 
             //Se valida campos de email de los clientes - Proceso Atencion al cliente.
@@ -267,12 +272,12 @@ class Tickets extends BaseController
                 }
                
                 if(!defined('HDZDEMO')){
-                    $portal_department_id = 20; # deparamento clienteexterno
+                    $portal_department_name = trim(getParamText('DEPARTAMENTO_CLIENTE_ESPECIAL'));
 
-                    if ($ticket->department_id == $portal_department_id) {
+                    if (!empty($portal_department_name) && $ticket->department_name == $portal_department_name) {
                         $tickets->replyTicketNotificationPortal($ticket, $message, (isset($files) ? $files : null));
-                    } else {                    
-                        $tickets->replyTicketNotification($ticket, $message, (isset($files) ? $files : null) , $checkedAttachmentFiles);
+                    } else {
+                        $tickets->replyTicketNotification($ticket, $message, (isset($files) ? $files : null), $checkedAttachmentFiles);
                     }
                 }
                 $this->session->setFlashdata('ticket_update', lang('Admin.tickets.messageSent'));
@@ -385,6 +390,33 @@ class Tickets extends BaseController
                     'required' => lang('Admin.error.enterMessage'),
                 ]
             ]);
+
+            $departmentModel = new \App\Models\Departments();
+            $selected_dept_id = $this->request->getPost('department');
+            $department = $departmentModel->find($selected_dept_id);
+            if ($department) {
+                $parent_deps_str = trim(getParamText('DEPS_PADRE_CON_HIJOS'));
+                $parent_deps_list = !empty($parent_deps_str) ? explode(',', $parent_deps_str) : [];
+
+                if (in_array($department->name, $parent_deps_list)) {
+                    $validation->setRule('departamento_adjunto', 'Departamento Adjunto', 'required|is_natural_no_zero', [
+                        'required' => 'Debes seleccionar un departamento adjunto (ej: Desarrollo o Soporte).'
+                    ]);
+
+                    $required_child_deps_str = trim(getParamText('DEPS_HIJOS_ADJUNTO_OBLIGATORIO'));
+                    $required_child_deps_list = !empty($required_child_deps_str) ? explode(',', $required_child_deps_str) : [];
+
+                    $selected_child_id = $this->request->getPost('departamento_adjunto');
+                    if ($selected_child_id) {
+                        $selected_child_obj = $departmentModel->find($selected_child_id);
+                        if ($selected_child_obj && in_array($selected_child_obj->name, $required_child_deps_list)) {
+                            $validation->setRule('attachment.0', 'Archivo Adjunto', 'uploaded[attachment.0]', [
+                                'uploaded' => 'Para el departamento ' . esc($selected_child_obj->name) . ', es obligatorio adjuntar al menos un archivo.'
+                            ]);
+                        }
+                    }
+                }
+            }           
             if($this->settings->config('ticket_attachment')){
                 $max_size = $this->settings->config('ticket_file_size')*1024;
                 $allowed_extensions = unserialize($this->settings->config('ticket_file_type'));
@@ -408,7 +440,8 @@ class Tickets extends BaseController
                 }
                 $name = ($this->request->getPost('fullname') == '') ? $this->request->getPost('email') : $this->request->getPost('fullname');
                 $client_id = $this->client->getClientID($name, $this->request->getPost('email'));
-                $ticket_id = $tickets->createTicket($client_id, $this->request->getPost('subject'), $this->request->getPost('department'), $this->request->getPost('priority'));
+                $final_department_id = $this->request->getPost('departamento_adjunto') ?: $this->request->getPost('department');
+                $ticket_id = $tickets->createTicket($client_id, $this->request->getPost('subject'), $final_department_id, $this->request->getPost('priority'));
                 $message = $this->request->getPost('message').$this->staff->getData('signature');
                 $message_id = $tickets->addMessage($ticket_id, $message, $this->staff->getData('id'));
                 $tickets->updateTicket([
@@ -428,15 +461,31 @@ class Tickets extends BaseController
         }
 
 
-        return view('staff/ticket_new',[
-            'error_msg' => isset($error_msg) ? $error_msg : null,
-            'success_msg' => isset($success_msg) ? $success_msg : null,
-            'canned_response' => $tickets->getCannedList(),
-            'departments_list' => Services::departments()->getAll(),
-            'ticket_statuses' => $tickets->statusList(),
+        $departmentModel = new \App\Models\Departments();
+        $all_departments = $departmentModel->orderBy('name', 'ASC')->findAll();
+
+        $child_map = [];
+        foreach($all_departments as $dep){
+            if($dep->id_padre != 0){
+                if(!isset($child_map[$dep->id_padre])){
+                    $child_map[$dep->id_padre] = [];
+                }
+                $child_map[$dep->id_padre][] = $dep;
+            }
+        }
+
+        $data_to_view = [
+            'error_msg'         => isset($error_msg) ? $error_msg : null,
+            'success_msg'       => isset($success_msg) ? $success_msg : null,
+            'canned_response'   => $tickets->getCannedList(),
+            'departments_list'  => $all_departments, 
+            'ticket_statuses'   => $tickets->statusList(),
             'ticket_priorities' => $tickets->getPriorities(),
-            'kb_selector' => Services::kb()->kb_article_selector(),
-        ]);
+            'kb_selector'       => Services::kb()->kb_article_selector(),
+            'child_map'         => $child_map, 
+        ];
+
+        return view('staff/ticket_new', $data_to_view);
     }
 
     public function cannedResponses()

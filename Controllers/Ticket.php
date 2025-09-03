@@ -109,6 +109,34 @@ class Ticket extends BaseController
 
             //Se consutla parametro de Proceso de Creditos.
             $paramCreditProcess = getParam('CREDIT_PROCESS');
+            $departmentModel = new \App\Models\Departments();
+
+            //  Verificamos si el departamento actual ("Sistemas") requiere seleccionar un hijo.
+            $parent_deps_str = trim(getParamText('DEPS_PADRE_CON_HIJOS'));
+            $parent_deps_list = !empty($parent_deps_str) ? explode(',', $parent_deps_str) : [];
+
+            // La variable $department ya está disponible en esta función
+            if (in_array($department->name, $parent_deps_list)) {
+                // Si es un padre, el campo del hijo (que llamaremos 'departamento_adjunto') es obligatorio.
+                $validation->setRule('departamento_adjunto', 'Departamento Adjunto', 'required|is_natural_no_zero', [
+                    'required' => 'Debes seleccionar un departamento adjunto (ej: Desarrollo o Soporte).'
+                ]);
+
+                //  Verificamos si el hijo seleccionado ("Desarrollo") requiere un adjunto.
+                $required_child_deps_str = trim(getParamText('DEPS_HIJOS_ADJUNTO_OBLIGATORIO'));
+                $required_child_deps_list = !empty($required_child_deps_str) ? explode(',', $required_child_deps_str) : [];
+
+                $selected_child_id = $this->request->getPost('departamento_adjunto');
+                if ($selected_child_id) {
+                    $selected_child_obj = $departmentModel->find($selected_child_id);
+                    if ($selected_child_obj && in_array($selected_child_obj->name, $required_child_deps_list)) {
+                        $validation->setRule('attachment.0', 'Archivo Adjunto', 'uploaded[attachment.0]', [
+                            'uploaded' => 'Para el departamento ' . esc($selected_child_obj->name) . ', es obligatorio adjuntar al menos un archivo.'
+                        ]);
+                    }
+                }
+            }
+
 
             //Valida proceso, Atencion al Cliente
             if($paramAttentionClient != null && trim($paramAttentionClient->param_text) === $nameDep) {
@@ -512,16 +540,31 @@ class Ticket extends BaseController
 
         #Obtengo el parametro para filtrar los asesores comerciales
         $filter_advisors = getParam('FILTER_COMMERCIAL');
-        return view('client/ticket_form',[
-            'error_msg' => isset($error_msg) ? $error_msg : null,
-            'department' => $department,
-            'validation' => $validation,
-            'captcha' => $reCAPTCHA->display(),
-            'ticket_priorities' => $tickets->getPriorities(),
-            'ticket_solicitude' => $this->settingsAbo->getSolicitude(),
-            'customFields' => $tickets->customFieldsFromDepartment($department->id),
+
+        $data_to_view = [
+            'error_msg'           => isset($error_msg) ? $error_msg : null,
+            'department'          => $department,
+            'validation'          => $validation,
+            'captcha'             => $reCAPTCHA->display(),
+            'ticket_priorities'   => $tickets->getPriorities(),
+            'ticket_solicitude'   => $this->settingsAbo->getSolicitude(),
+            'customFields'        => $tickets->customFieldsFromDepartment($department->id),
             'advisors_commercial' => $this->staff->getAdvisorsCommercial($filter_advisors != null ? $filter_advisors->param_text : '')
-        ]);
+        ];
+
+        $departmentModel = new \App\Models\Departments();
+        $parent_deps_str_view = trim(getParamText('DEPS_PADRE_CON_HIJOS'));
+        $parent_deps_list_view = !empty($parent_deps_str_view) ? explode(',', $parent_deps_str_view) : [];
+
+        if (in_array($department->name, $parent_deps_list_view)) {
+            // Buscamos los hijos del departamento actual y los añadimos a los datos para la vista
+            $data_to_view['child_departments'] = $departmentModel->where('id_padre', $department->id)->where('private', 0)->findAll();
+        }
+
+
+        return view('client/ticket_form', $data_to_view);
+
+        
     }
 
     private function applyCommonValidations($validation)

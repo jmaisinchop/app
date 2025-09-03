@@ -14,7 +14,7 @@ header("Access-Control-Allow-Origin: *");
 $countChildDpts = count_child_departments($department->id);
 
 #Consulta el parametro para el formulario ATENCION DEL CLIENTE
-$paramAtentionClient = getParam('DEPARTMENT_ATTENTION_CLIENT'); 
+$paramAtentionClient = getParam('DEPARTMENT_ATTENTION_CLIENT');
 
 #Consulta el parametro para el formulario PAGOS RECIBIDOS PRESTAMOS
 $paramLoans = getParam('DEPARTMENT_LOAN_PAYMENTS');
@@ -27,14 +27,11 @@ $paramLoansText = isset($paramLoans->param_text) ? trim($paramLoans->param_text)
         <?php if($paramAttentionClientText === $department->name ){
             echo lang('Client.submitTicket.title2');
         } else {
-            echo lang('Client.submitTicket.title'); 
+            echo lang('Client.submitTicket.title');
         }
         ?>
     </h1>
 
-<!--==========================================================================
-=            Script para agregar nueva fila a la tabla de Valijas            =
-===========================================================================-->
 <script>
     $(function(){
     // Clona la fila oculta que tiene los campos base, y la agrega al final de la tabla
@@ -42,7 +39,7 @@ $paramLoansText = isset($paramLoans->param_text) ? trim($paramLoans->param_text)
         $("#tabla tbody tr:eq(0)").clone().removeClass('fila-fija').appendTo("#tabla");
     });
 
-    // Evento que selecciona la fila y la elimina 
+    // Evento que selecciona la fila y la elimina
     $(document).on("click",".eliminar",function(){
         var nFilas = $("#tabla tr").length;
         var parent = $(this).parents().get(0);
@@ -53,15 +50,10 @@ $paramLoansText = isset($paramLoans->param_text) ? trim($paramLoans->param_text)
     });
     });
 </script>
-<!--====  End of Script para agregar nueva fila a la tabla de Valijas  ====-->
-
 <?php
 if(isset($error_msg)){
     echo '<div class="alert alert-danger">'.$error_msg.'</div>';
 }
-/*echo '<pre>';
-print_r($advisors_commercial);
-echo '</pre>';*/
 
 echo form_open_multipart('',
     ['name' => 'myForm'],
@@ -71,7 +63,6 @@ echo form_open_multipart('',
     <div class="row">
         <div class="col-lg-12">
 
-            <!-- Campo oculto del email del Ejecutivo -->
             <input type="hidden" name="emailEjecutivo" value="<?php echo client_data('email'); ?>">
             
             <h3 class="mb-3" style="font-weight: 300"><?php echo lang('Client.submitTicket.generalInformation');?></h3>
@@ -90,63 +81,35 @@ echo form_open_multipart('',
                 </div>
             <?php endif;?>
 
-            <!-- Para cargar el nombre del departamento. Proceso Atencion al Cliente -->
-            <?php if ($paramAttentionClientText === $department->name): ?>
-                <div class="card">
-                    <div class="card-body">
-                       <div class="form-group">
-                            <label>
-                                <?php echo lang('Client.form.department');?>
-                            </label>
-                            <input type="text" value="<?php echo $department->name;?>" class="form-control" readonly>
-                        </div> 
-                    
-            <!-- Otros procesos -->
-            <?php else: ?>
-                <div class="form-group">
-                    <label>
-                        <?php echo lang('Client.form.department');?>
-                    </label>
-                    <input type="text" value="<?php echo $department->name;?>" class="form-control" readonly>
-                </div>
-            <?php endif ?>
+            <div class="form-group">
+                <label>
+                    <?php echo lang('Client.form.department');?>
+                </label>
+                <input type="text" value="<?php echo esc($department->name);?>" class="form-control" readonly>
+            </div>
             
             <?php
             if(isset($customFields)) { ?>
                 <div class="form-row">
-                    <?php 
+                    <?php
                     foreach ($customFields as $customField){
                         echo parseCustomFieldsForm($customField);
                     }
                     ?>
-                </div> 
+                </div>
             <?php } ?>
 
-            <!-- Proceso Atencion al Cliente. Formulario de Solictud -->
             <?php if($paramAttentionClientText === $department->name) { ?>
-
                 <?php include_once ('solicitude_form.php'); ?>
-
             <?php } ?>
 
-            <!-- Proceso Atencion al Cliente. Formulario de Solictud -->
             <?php if($paramLoansText === $department->name) { ?>
-
                 <?php include_once ('loan_payments_form.php'); ?>
-
             <?php } ?>
 
-            <?php
-                $departmentName = trim($department->name);
-            ?>        
+            <?php $departmentName = trim($department->name); ?>
 
-            <!-- Otros procesos -->
-            <?php if($paramAttentionClientText !== $departmentName && $paramLoansText !== $departmentName) { 
-                ?>
-
-                <!--===============================================================================
-                =            Se agrega radio button para Tipo Cliente Proceso Creditos            =
-                ================================================================================-->
+            <?php if($paramAttentionClientText !== $departmentName && $paramLoansText !== $departmentName) { ?>
                 <?php if (trim(getParamText('CREDIT_PROCESS')) === $department->name): ?>
                     <div class="form-group">
                         <label>Tipo Cliente <span class="text-danger">*</span></label>
@@ -154,49 +117,65 @@ echo form_open_multipart('',
                            <div class="custom-control custom-radio check_type_person">
                                 <input type="radio" id="typePerson<?php echo $k; ?>" name="typeClientCreditProcess" value="<?php echo $k; ?>" class="custom-control-input">
                                 <label class="custom-control-label" for="typePerson<?php echo $k; ?>"><?php echo $v; ?></label>
-                            </div> 
+                            </div>
                         <?php endforeach ?>
-                    </div>  
+                    </div>
                 <?php endif ?>
-                <!--====  End of Se agrega radio button para Tipo Cliente Proceso Creditos  ====-->
-                 
-                <!--===================================================================================
-                =            Para agregar los departamentos Hijos del Proceso Seleccionado            =
-                ====================================================================================-->
-                <?php if ($countChildDpts > 0): ?>
+                <?php
+                // Verificamos si el departamento actual es de los que usan la nueva lógica de selección única (radio buttons)
+                $unique_selection_parents_str = trim(getParamText('DEPS_HIJOS_SELECCION_UNICA'));
+                $unique_selection_parents_list = !empty($unique_selection_parents_str) ? explode(',', $unique_selection_parents_str) : [];
+                $is_unique_selection = in_array($department->name, $unique_selection_parents_list);
+                ?>
+
+                <?php if ($is_unique_selection && isset($child_departments) && !empty($child_departments)): // Lógica nueva para "Sistemas" con radio buttons ?>
+                <div class="form-group">
+                    <label>Seleccione un Departamento Adjunto (solo uno): <span class="text-danger">*</span></label>
+                    <?php foreach($child_departments as $child): ?>
+                        <div class="custom-control custom-radio">
+                            <input type="radio"
+                                   id="child_<?php echo $child->id; ?>"
+                                   name="departamento_adjunto"
+                                   value="<?php echo $child->id; ?>"
+                                   class="custom-control-input child-department-radio"
+                                   <?php echo set_radio('departamento_adjunto', $child->id); ?>
+                            >
+                            <label class="custom-control-label" for="child_<?php echo $child->id; ?>">
+                                <?php echo esc($child->name); ?>
+                            </label>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+                <?php elseif ($countChildDpts > 0): // Tu lógica original para los demás departamentos con checkboxes ?>
                     <div class="form-group">
                         <label>
-                            <?php echo lang('Client.form.dptsAdjunto');?> <?php echo trim(getParamText('CREDIT_PROCESS')) === $department->name ? "" : '<span class="text-danger">*</span>'?> 
+                            <?php echo lang('Client.form.dptsAdjunto');?> <?php echo trim(getParamText('CREDIT_PROCESS')) === $department->name ? "" : '<span class="text-danger">*</span>'?>
                         </label>
-
                         <?php
                         if($departments = getDepartmentsChild(true, $department->id)){
-                            foreach ($departments as $item){ 
+                            foreach ($departments as $item){
                                 ?>
                                 <div class="custom-control custom-checkbox departments_child">
                                     <input type="checkbox" id="department<?php echo $item->id;?>" name="departamentos[]" value="<?php echo $item->id;?>" class="custom-control-input">
                                     <label class="custom-control-label" for="department<?php echo $item->id;?>"><?php echo $item->name;?></label>
-                                </div>                                 
+                                </div>
                                 <?php
                             }
                         }
                         ?>
-                    </div> 
-                <?php endif ?>
-                <!--====  End of Para agregar los departamentos Hijos del Proceso Seleccionado  ====-->
-                
+                    </div>
+                <?php endif; ?>
                 <h3 class="mt-5 mb-3" style="font-weight: 300"><?php echo lang('Client.form.yourMessage');?></h3>
 
-                <div class="form-row"> 
+                <div class="form-row">
                     <div class="form-group col-md-6">
-                        <!-- Para Asignar nombre de asunto, segun el proceso seleccinado -->                  
-                        <?php $tipoAsunto=  $department->name == "Valijas" ? lang('Client.form.subject') : lang('Client.form.asuntoCredito') ?>
+                        <?php $tipoAsunto = $department->name == "Valijas" ? lang('Client.form.subject') : lang('Client.form.asuntoCredito') ?>
 
                         <label class="<?php echo ($validation->hasError('subject') ? 'text-danger' : '');?>">
                             <?php echo $tipoAsunto; ?> <span class="text-danger">*</span>
                         </label>
                         <input type="text" name="subject" id="subject" value="<?php echo set_value('subject');?>" class="form-control <?php echo ($validation->hasError('subject') ? 'is-invalid' : '');?>" required>
-                    </div> 
+                    </div>
 
                      <div class="form-group col-md-6">
                         <label><?php echo lang('Admin.form.priority');?></label>
@@ -213,11 +192,8 @@ echo form_open_multipart('',
                             }
                             ?>
                         </select>
-                    </div> 
+                    </div>
 
-                    <!--=================================================================================================================
-                    =            Para cargar Drop-drown select de Asesores Comerciales para Proceso de Tickets sin respuesta            =
-                    ==================================================================================================================-->
                     <?php if (trim(getParamText('ONE_WAY_TICKET')) === $department->name ): ?>
                         <div class="form-group col-md-12">
                             <label class="<?php echo ($validation->hasError('advisor') ? 'text-danger' : '');?>">
@@ -236,45 +212,51 @@ echo form_open_multipart('',
                             </select>
                         </div>
                     <?php endif ?>
-                    <!--====  End of Para cargar Drop-drown select de Asesores Comerciales para Proceso de Tickets sin respuesta  ====-->
-                    
-                </div>
- 
-                <!--========================================================================================
-                =            Se carga el formulario y Tabla dinamica para el proceso de VALIJAS            =
-                =========================================================================================-->              
+                    </div>
+
                 <?php if ($department->name == "Valijas"): ?>
                     
                     <?php include_once ('valija_form.php') ?>
 
-                <!--==============================================================================================================
-                =            Text area DETALLE MENSAJE para los demas procesos, excepto Valijas y Atención al Cliente            =
-                ===============================================================================================================-->
                 <?php else: ?>
                     <div class="form-group">
                         <textarea name="message" rows="10" class="form-control <?php echo ($validation->hasError('message') ? 'is-invalid' : '');?>" required><?php echo set_value('message');?></textarea>
                     </div>
-
                 <?php endif ?>
-
             <?php } ?>
 
-            <!--==========================================================================================
-            =            Se carga la parametrizacion del adjunto de archivos por departamento            =
-            ===========================================================================================-->
-            <?php 
-                $configAttachmentDep = getConfigDepartmentById($department->id, 'advisor');
-                /*echo '<pre>';
-                    print_r($configAttachmentDep);
-                echo '</pre>';*/
-                
-                if($configAttachmentDep !=null) {
-                    if($configAttachmentDep->ticket_attachment){
-                    ?>                    
-                    <div class="form-group <?php echo $department->name === $paramAttentionClientText ? 'mt-3' :''; ?>">
-                        <label><?php echo lang('Client.form.attachments');?></label>
+            <?php
+            $configAttachmentDep = getConfigDepartmentById($department->id, 'advisor');
+            if($configAttachmentDep !=null) {
+                if($configAttachmentDep->ticket_attachment){
+                ?>
+                <div class="form-group <?php echo $department->name === $paramAttentionClientText ? 'mt-3' :''; ?>">
+                    <label><?php echo lang('Client.form.attachments');?>
+                        <small class="text-danger" id="attachment-notice" style="display: none;">(Adjunto obligatorio)</small>
+                    </label>
+                    <?php
+                    for($i=1;$i<=$configAttachmentDep->ticket_attachment_number;$i++){
+                        ?>
+                        <div class="custom-file mb-2">
+                            <input type="file" class="custom-file-input" name="attachment[]" id="customFile<?php echo $i;?>">
+                            <label class="custom-file-label" for="customFile<?php echo $i;?>" data-browse="<?php echo lang('Client.form.browse');?>"><?php echo lang('Client.form.chooseFile');?></label>
+                        </div>
                         <?php
-                        for($i=1;$i<=$configAttachmentDep->ticket_attachment_number;$i++){
+                    }
+                    ?>
+                    <small class="text-muted"><?php echo lang('Client.form.allowedFiles');?> <?php echo '*.'.implode(', *.', unserialize($configAttachmentDep->ticket_file_type)).'. Tamaño máximo del archivo: '.$configAttachmentDep->ticket_file_size.' MB';?></small>
+                </div>
+                <?php
+                }
+            } else {
+                if(site_config('ticket_attachment')){
+                    ?>
+                    <div class="form-group">
+                        <label><?php echo lang('Client.form.attachments');?>
+                           <small class="text-danger" id="attachment-notice" style="display: none;">(Adjunto obligatorio)</small>
+                        </label>
+                        <?php
+                        for($i=1;$i<=site_config('ticket_attachment_number');$i++){
                             ?>
                             <div class="custom-file mb-2">
                                 <input type="file" class="custom-file-input" name="attachment[]" id="customFile<?php echo $i;?>">
@@ -283,33 +265,14 @@ echo form_open_multipart('',
                             <?php
                         }
                         ?>
-                        <small class="text-muted"><?php echo lang('Client.form.allowedFiles');?> <?php echo '*.'.implode(', *.', unserialize($configAttachmentDep->ticket_file_type)).'. Tamaño máximo del archivo: '.$configAttachmentDep->ticket_file_size.' MB';?></small>
+                        <small class="text-muted"><?php echo lang('Client.form.allowedFiles');?> <?php echo '*.'.implode(', *.', unserialize(site_config('ticket_file_type')));?></small>
                     </div>
                     <?php
-                    } 
-                } else {
-                    if(site_config('ticket_attachment')){
-                        ?>
-                        <div class="form-group">
-                            <label><?php echo lang('Client.form.attachments');?></label>
-                            <?php
-                            for($i=1;$i<=site_config('ticket_attachment_number');$i++){
-                                ?>
-                                <div class="custom-file mb-2">
-                                    <input type="file" class="custom-file-input" name="attachment[]" id="customFile<?php echo $i;?>">
-                                    <label class="custom-file-label" for="customFile<?php echo $i;?>" data-browse="<?php echo lang('Client.form.browse');?>"><?php echo lang('Client.form.chooseFile');?></label>
-                                </div>
-                                <?php
-                            }
-                            ?>
-                            <small class="text-muted"><?php echo lang('Client.form.allowedFiles');?> <?php echo '*.'.implode(', *.', unserialize(site_config('ticket_file_type')));?></small>
-                        </div>
-                        <?php
-                    }
                 }
-                if(isset($captcha)){
-                    echo $captcha;
-                }
+            }
+            if(isset($captcha)){
+                echo $captcha;
+            }
             ?>
 
             <div class="button_group mt-3">
@@ -330,7 +293,6 @@ $this->section('script_block');
 ?>
 <script type="text/javascript" src="<?php echo base_url('assets/components/bs-custom-file-input/bs-custom-file-input-min.js');?>"></script>
 <script>
-
     //Para concatenar los numeros de (CTA, DPF y CREDITO) con el id (TIPO DE SOLICITUD), proceso ATENCION AL CLIENTE.
     let inputNumbers = document.querySelectorAll('div.input-numbers > input');
     let idInputNumbers = document.querySelectorAll('div.id-input-numbers > input');
@@ -344,6 +306,48 @@ $this->section('script_block');
     let dptsChild = document.querySelectorAll('div.departments_child > input');
 
     $(function(){
+        // =============================================================
+        // ===== INICIO: CÓDIGO NUEVO PARA DEPARTAMENTOS ADJUNTOS ======
+        // =============================================================
+        <?php
+            // Obtenemos el texto del parámetro y lo convertimos en array de forma segura
+            $required_deps_text = trim(getParamText('DEPS_HIJOS_ADJUNTO_OBLIGATORIO'));
+            $required_deps_array = !empty($required_deps_text) ? explode(',', $required_deps_text) : [];
+        ?>
+        const requiredChildDepsList = <?php echo json_encode($required_deps_array); ?>;
+
+        const departmentNames = {
+            <?php if(isset($child_departments)): ?>
+                <?php foreach($child_departments as $dep): ?>
+                    "<?php echo $dep->id; ?>": "<?php echo esc($dep->name); ?>",
+                <?php endforeach; ?>
+            <?php endif; ?>
+        };
+
+        const attachmentNotice = $('#attachment-notice');
+
+        function checkAttachmentRequirement() {
+            const selectedRadio = $('input[name="departamento_adjunto"]:checked');
+            if (selectedRadio.length > 0) {
+                const childId = selectedRadio.val();
+                const childName = departmentNames[childId] || '';
+                if (requiredChildDepsList.includes(childName)) {
+                    attachmentNotice.show();
+                } else {
+                    attachmentNotice.hide();
+                }
+            } else {
+                 attachmentNotice.hide();
+            }
+        }
+
+        // El selector ahora es más específico para no interferir con otros radios
+        $('input.child-department-radio').on('change', checkAttachmentRequirement);
+        checkAttachmentRequirement(); // Revisar al cargar la página
+        // =============================================================
+        // ===== FIN: CÓDIGO NUEVO AÑADIDO =============================
+        // =============================================================
+        
         checkTypePersonCreditProcess();
         showFormPersonJur();
         $('#fieldTypePerson').on('change', function (){
@@ -372,7 +376,7 @@ $this->section('script_block');
 
         //Evento click submit - Guardar Ticket
         $('#btnSubmit').on('click', function () {
-            enabledCheckBeforeSubmit ();
+            enabledCheckBeforeSubmit();
         });
 
         $(document).ready(function () {
@@ -418,7 +422,7 @@ $this->section('script_block');
             //Valida que el email del destino 2 siempre sea minúsculas
             $("#email2").on('input', function(){
                 $(this).val( $(this).val().toLowerCase() );
-            });  
+            });
         }
     }
 
@@ -427,7 +431,7 @@ $this->section('script_block');
          *Deparments
          * 1  Cumplimiento
          * 8  Operaciones
-         * 11 Legal 
+         * 11 Legal
          **/
         
         for (var i = 0 ; i < radioTypePerson.length; i++) {
@@ -469,3 +473,4 @@ $this->section('script_block');
 </script>
 <?php
 $this->endSection();
+?>

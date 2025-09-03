@@ -6,9 +6,7 @@ use Gregwar\Captcha\CaptchaBuilder;
 class AustrobankPortal extends BaseController
 {
 
-    const ATENCION_CLIENTE_DEPT_ID = 20;
     const DEFAULT_PRIORITY_ID = 1; 
-
 
     public function index()
     {
@@ -79,10 +77,23 @@ class AustrobankPortal extends BaseController
             $this->request->getPost('email')
         );
 
+        helper('helpdesk');
+        $departmentModel = new \App\Models\Departments();
+
+        $default_dept_name = trim(getParamText('DEPARTAMENTO_CLIENTE_ESPECIAL'));
+        $department_id_to_use = null;
+        if (!empty($default_dept_name)) {
+            $departmentObject = $departmentModel->where('name', $default_dept_name)->first();
+            if ($departmentObject) {
+                $department_id_to_use = $departmentObject->id;
+            }
+        }
+
+
         $ticketId = $tickets->createTicket(
             $clientId,
             $this->request->getPost('subject'),
-            self::ATENCION_CLIENTE_DEPT_ID,
+            $department_id_to_use,
             self::DEFAULT_PRIORITY_ID
         );
 
